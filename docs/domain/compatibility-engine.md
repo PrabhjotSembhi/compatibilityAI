@@ -52,3 +52,13 @@ AI can assist with:
 - Suggesting questions to improve profile quality.
 
 AI should not directly decide candidate eligibility, final rank, or visibility.
+
+## Phase 6 Implementation
+
+The first backend implementation lives in `src/server/compatibility`.
+
+- Deterministic evaluation endpoint: `POST /api/compatibility/evaluate`
+- Post-score AI explanation endpoint: `POST /api/compatibility/explain`
+- Pure algorithm entry point: `computeCompatibilityRun`
+
+The engine currently uses configurable weights for lifestyle, personality, interests, values, and vector similarity. Hard filters execute before scoring, and failed candidates are removed from ranked results.
