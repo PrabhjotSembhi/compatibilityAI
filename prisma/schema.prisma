@@ -12,16 +12,108 @@ datasource db {
   provider = "postgresql"
 }
 
+enum RelationshipContextStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ProfileVisibility {
+  PRIVATE
+  LIMITED
+  DISCOVERABLE
+}
+
+enum ProfileStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ReportStatus {
+  DRAFT
+  GENERATING
+  READY
+  FAILED
+  ARCHIVED
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ConversationMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum MatchStatus {
+  PROPOSED
+  VISIBLE
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum SubscriptionStatus {
+  FREE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum BillingProvider {
+  INTERNAL
+  STRIPE
+  RAZORPAY
+}
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum PromptTemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum AiRequestStatus {
+  SUCCEEDED
+  FAILED
+}
+
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
-  sessions      Session[]
-  accounts      Account[]
+  id                    String                 @id
+  name                  String
+  email                 String                 @unique
+  emailVerified         Boolean
+  image                 String?
+  createdAt             DateTime
+  updatedAt             DateTime
+  sessions              Session[]
+  accounts              Account[]
+  profiles              Profile[]
+  personalityProfiles   PersonalityProfile[]
+  compatibilityProfiles CompatibilityProfile[]
+  reports               Report[]
+  conversations         Conversation[]
+  matchesAsActor        Match[]                @relation("MatchActor")
+  matchesAsCandidate    Match[]                @relation("MatchCandidate")
+  subscription          Subscription?
+  notifications         Notification[]
+  settings              UserSettings?
+  aiUsageEvents         AiUsageEvent[]
 }
 
 model Session {
@@ -66,4 +158,294 @@ model Verification {
   updatedAt  DateTime?
 
   @@index([identifier])
+}
+
+model RelationshipContext {
+  id                    String                    @id @default(cuid())
+  slug                  String                    @unique
+  name                  String
+  description           String?
+  status                RelationshipContextStatus @default(DRAFT)
+  profileSchema         Json?
+  scoringConfig         Json?
+  visibilityPolicy      Json?
+  consentPolicy         Json?
+  successMetrics        Json?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  profiles              Profile[]
+  compatibilityProfiles CompatibilityProfile[]
+  reports               Report[]
+  conversations         Conversation[]
+  matches               Match[]
+}
+
+model Profile {
+  id                    String                @id @default(cuid())
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relationshipContextId String?
+  relationshipContext   RelationshipContext?  @relation(fields: [relationshipContextId], references: [id], onDelete: SetNull)
+  displayName           String?
+  bio                   String?
+  locale                String?
+  city                  String?
+  country               String?
+  languages             String[]
+  visibility            ProfileVisibility     @default(PRIVATE)
+  status                ProfileStatus         @default(DRAFT)
+  attributes            Json?
+  preferences           Json?
+  constraints           Json?
+  version               Int                   @default(1)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  personalityProfile    PersonalityProfile?
+  compatibilityProfile  CompatibilityProfile?
+  reports               Report[]
+  conversations         Conversation[]
+  actorMatches          Match[]               @relation("MatchActorProfile")
+  candidateMatches      Match[]               @relation("MatchCandidateProfile")
+
+  @@unique([userId, relationshipContextId])
+  @@index([userId])
+  @@index([relationshipContextId])
+}
+
+model PersonalityProfile {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId          String?  @unique
+  profile            Profile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  dimensions         Json?
+  strengths          Json?
+  blindSpots         Json?
+  communicationStyle String?
+  conflictStyle      String?
+  attachmentStyle    String?
+  source             String?
+  confidence         Float?
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model CompatibilityProfile {
+  id                    String               @id @default(cuid())
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId             String?              @unique
+  profile               Profile?             @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  relationshipContextId String?
+  relationshipContext   RelationshipContext? @relation(fields: [relationshipContextId], references: [id], onDelete: SetNull)
+  features              Json?
+  values                Json?
+  interests             Json?
+  dealBreakers          Json?
+  embedding             Float[]
+  version               Int                  @default(1)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([relationshipContextId])
+}
+
+model Report {
+  id                    String               @id @default(cuid())
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId             String?
+  profile               Profile?             @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  relationshipContextId String?
+  relationshipContext   RelationshipContext? @relation(fields: [relationshipContextId], references: [id], onDelete: SetNull)
+  type                  String
+  title                 String
+  status                ReportStatus         @default(DRAFT)
+  summary               String?
+  payload               Json?
+  shareable             Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([profileId])
+  @@index([relationshipContextId])
+}
+
+model Conversation {
+  id                    String                @id @default(cuid())
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId             String?
+  profile               Profile?              @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  relationshipContextId String?
+  relationshipContext   RelationshipContext?  @relation(fields: [relationshipContextId], references: [id], onDelete: SetNull)
+  topic                 String?
+  status                ConversationStatus    @default(ACTIVE)
+  metadata              Json?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  messages              ConversationMessage[]
+
+  @@index([userId])
+  @@index([profileId])
+  @@index([relationshipContextId])
+}
+
+model ConversationMessage {
+  id             String                  @id @default(cuid())
+  conversationId String
+  conversation   Conversation            @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ConversationMessageRole
+  content        String
+  metadata       Json?
+  createdAt      DateTime                @default(now())
+
+  @@index([conversationId])
+}
+
+model Match {
+  id                    String               @id @default(cuid())
+  relationshipContextId String?
+  relationshipContext   RelationshipContext? @relation(fields: [relationshipContextId], references: [id], onDelete: SetNull)
+  actorUserId           String
+  actorUser             User                 @relation("MatchActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  candidateUserId       String
+  candidateUser         User                 @relation("MatchCandidate", fields: [candidateUserId], references: [id], onDelete: Cascade)
+  actorProfileId        String?
+  actorProfile          Profile?             @relation("MatchActorProfile", fields: [actorProfileId], references: [id], onDelete: SetNull)
+  candidateProfileId    String?
+  candidateProfile      Profile?             @relation("MatchCandidateProfile", fields: [candidateProfileId], references: [id], onDelete: SetNull)
+  status                MatchStatus          @default(PROPOSED)
+  hardFilters           Json?
+  scoreBreakdown        Json?
+  finalScore            Float?
+  explanation           Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([relationshipContextId])
+  @@index([actorUserId])
+  @@index([candidateUserId])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String             @unique
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                 SubscriptionStatus @default(FREE)
+  plan                   String             @default("free")
+  provider               BillingProvider    @default(INTERNAL)
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  currentPeriodEnd       DateTime?
+  metadata               Json?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel @default(IN_APP)
+  status    NotificationStatus  @default(UNREAD)
+  type      String
+  title     String
+  body      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+model UserSettings {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locale        String?
+  timezone      String?
+  privacy       Json?
+  notifications Json?
+  product       Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PromptTemplate {
+  id            String               @id @default(cuid())
+  key           String               @unique
+  name          String
+  description   String?
+  status        PromptTemplateStatus @default(DRAFT)
+  defaultModel  String?
+  defaultSchema Json?
+  metadata      Json?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  versions      PromptVersion[]
+}
+
+model PromptVersion {
+  id                 String         @id @default(cuid())
+  promptTemplateId   String
+  promptTemplate     PromptTemplate @relation(fields: [promptTemplateId], references: [id], onDelete: Cascade)
+  version            Int
+  systemPrompt       String
+  developerPrompt    String?
+  userPromptTemplate String
+  jsonSchema         Json?
+  model              String?
+  isActive           Boolean        @default(false)
+  changelog          String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  usageEvents        AiUsageEvent[]
+
+  @@unique([promptTemplateId, version])
+  @@index([promptTemplateId])
+  @@index([isActive])
+}
+
+model AiUsageEvent {
+  id              String          @id @default(cuid())
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  promptVersionId String?
+  promptVersion   PromptVersion?  @relation(fields: [promptVersionId], references: [id], onDelete: SetNull)
+  provider        String
+  model           String
+  featureKey      String
+  status          AiRequestStatus
+  requestId       String?
+  inputTokens     Int?
+  outputTokens    Int?
+  totalTokens     Int?
+  latencyMs       Int?
+  errorCode       String?
+  errorMessage    String?
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+
+  @@index([userId])
+  @@index([promptVersionId])
+  @@index([featureKey])
+  @@index([createdAt])
+}
+
+model AiRateLimitBucket {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  count        Int      @default(0)
+  limit        Int
+  windowMs     Int
+  windowEndsAt DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
