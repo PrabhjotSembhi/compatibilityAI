@@ -2,11 +2,11 @@
 
 Compatibility AI is an AI Compatibility Platform. Dating is the first application, but the core product is a reusable compatibility engine for many relationship contexts: friendship, co-founder discovery, professional networking, mentoring, groups, travel partners, study partners, and team formation.
 
-This repository is being built phase by phase. Phase 6 is in progress: deterministic compatibility scoring exists, with backend-first architecture and minimal UI.
+This repository is being built phase by phase. Phase 7 is in progress: matching workflows now sit on top of the deterministic compatibility engine, with backend-first architecture and minimal UI.
 
 ## Current Phase
 
-Phase 6: Compatibility Engine
+Phase 7: Matching
 
 Included:
 
@@ -41,13 +41,17 @@ Included:
 - Weighted lifestyle, personality, interest, values, and vector scoring
 - Final ranking with stable tie-breaks
 - Optional post-score AI explanation endpoint
+- Candidate filtering API
+- Match recommendations API
+- Compatibility report creation API
 
 Not included yet:
 
 - Dating features
 - Backend-paid AI report generation
 - Full report viewer UI
-- Full match marketplace UI
+- Match marketplace UI
+- Mutual match acceptance workflow
 - Messaging
 - Payments
 - Email service
@@ -92,4 +96,5 @@ npm run build
 - `docs/operations/phase-4-ai-infrastructure.md` - Phase 4 AI infrastructure notes.
 - `docs/operations/phase-5-self-discovery.md` - Phase 5 self-discovery notes.
 - `docs/operations/phase-6-compatibility-engine.md` - Phase 6 compatibility engine notes.
+- `docs/operations/phase-7-matching.md` - Phase 7 matching workflow notes.
 - `docs/operations/environment.md` - environment variable reference.
