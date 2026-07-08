@@ -234,9 +234,10 @@ export function TestConsole() {
     setResponse("Running...");
 
     try {
-      const url = query.trim()
-        ? `${selected.path}?${query.trim().replace(/^\?/, "")}`
-        : selected.path;
+      const url =
+        selected.method === "GET" && query.trim()
+          ? `${selected.path}?${query.trim().replace(/^\?/, "")}`
+          : selected.path;
       const init: RequestInit = {
         method: selected.method,
         headers:
@@ -325,9 +326,10 @@ export function TestConsole() {
                 </span>
                 <input
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring/30"
+                  disabled={selected.method !== "GET"}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="userId=user_123&take=20"
-                  value={query}
+                  value={selected.method === "GET" ? query : ""}
                 />
               </label>
 

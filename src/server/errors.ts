@@ -40,5 +40,53 @@ export function toAppError(error: unknown) {
     return error;
   }
 
+  if (isPrismaConnectionError(error)) {
+    return new AppError(
+      "SERVICE_UNAVAILABLE",
+      "Database is unavailable. Check DATABASE_URL and whether the database is running.",
+      readErrorDetails(error),
+    );
+  }
+
+  if (isPrismaKnownError(error)) {
+    return new AppError(
+      "INTERNAL_ERROR",
+      "Database request failed.",
+      readErrorDetails(error),
+    );
+  }
+
   return new AppError("INTERNAL_ERROR", "Unexpected server error");
+}
+
+function isPrismaConnectionError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+
+  return code === "ECONNREFUSED" || code === "P1001";
+}
+
+function isPrismaKnownError(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "clientVersion" in error &&
+    "code" in error,
+  );
+}
+
+function readErrorDetails(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  return {
+    name: "name" in error ? error.name : undefined,
+    code: "code" in error ? error.code : undefined,
+    message: "message" in error ? error.message : undefined,
+    meta: "meta" in error ? error.meta : undefined,
+  };
 }
