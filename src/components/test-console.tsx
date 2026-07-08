@@ -27,9 +27,9 @@ type Endpoint = {
   query?: string;
 };
 
-const sampleActor = "user_actor";
-const sampleCandidate = "user_candidate";
-const sampleContext = "ctx_default";
+const sampleActor = "user_001";
+const sampleCandidate = "user_002";
+const sampleContext = "demo_dating";
 
 const endpoints: Endpoint[] = [
   {

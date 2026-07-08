@@ -106,4 +106,5 @@ npm run build
 - `docs/operations/phase-6-compatibility-engine.md` - Phase 6 compatibility engine notes.
 - `docs/operations/phase-7-matching.md` - Phase 7 matching workflow notes.
 - `docs/operations/phase-8-social-features.md` - Phase 8 social features notes.
+- `docs/operations/demo-seeding.md` - local-only fake profile seeding notes.
 - `docs/operations/environment.md` - environment variable reference.
