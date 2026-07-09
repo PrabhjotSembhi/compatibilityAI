@@ -34,6 +34,7 @@ export function getEnv() {
 
 function withAppUrlFallbacks(source: NodeJS.ProcessEnv) {
   const inferredUrl = inferVercelUrl(source) ?? "http://localhost:3000";
+  const allowBuildPlaceholders = isNextProductionBuild(source);
   const nextPublicAppUrl = isLocalhostInProduction(
     source.NEXT_PUBLIC_APP_URL,
     source,
@@ -46,6 +47,14 @@ function withAppUrlFallbacks(source: NodeJS.ProcessEnv) {
 
   return {
     ...source,
+    DATABASE_URL:
+      source.DATABASE_URL ??
+      (allowBuildPlaceholders
+        ? "postgresql://build:build@localhost:5432/build"
+        : undefined),
+    BETTER_AUTH_SECRET:
+      source.BETTER_AUTH_SECRET ??
+      (allowBuildPlaceholders ? "build-time-placeholder-secret" : undefined),
     NEXT_PUBLIC_APP_URL: nextPublicAppUrl,
     BETTER_AUTH_URL: betterAuthUrl,
   };
@@ -68,4 +77,8 @@ function isLocalhostInProduction(
   return (
     source.NODE_ENV === "production" && Boolean(value?.includes("localhost"))
   );
+}
+
+function isNextProductionBuild(source: NodeJS.ProcessEnv) {
+  return source.NEXT_PHASE === "phase-production-build";
 }
