@@ -18,14 +18,54 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   POSTHOG_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
+  VERCEL_URL: z.string().optional(),
+  VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
 });
 
 let cachedEnv: z.infer<typeof envSchema> | undefined;
 
 export function getEnv() {
   if (!cachedEnv) {
-    cachedEnv = envSchema.parse(process.env);
+    cachedEnv = envSchema.parse(withAppUrlFallbacks(process.env));
   }
 
   return cachedEnv;
+}
+
+function withAppUrlFallbacks(source: NodeJS.ProcessEnv) {
+  const inferredUrl = inferVercelUrl(source) ?? "http://localhost:3000";
+  const nextPublicAppUrl = isLocalhostInProduction(
+    source.NEXT_PUBLIC_APP_URL,
+    source,
+  )
+    ? inferredUrl
+    : (source.NEXT_PUBLIC_APP_URL ?? inferredUrl);
+  const betterAuthUrl = isLocalhostInProduction(source.BETTER_AUTH_URL, source)
+    ? nextPublicAppUrl
+    : (source.BETTER_AUTH_URL ?? nextPublicAppUrl);
+
+  return {
+    ...source,
+    NEXT_PUBLIC_APP_URL: nextPublicAppUrl,
+    BETTER_AUTH_URL: betterAuthUrl,
+  };
+}
+
+function inferVercelUrl(source: NodeJS.ProcessEnv) {
+  const vercelUrl = source.VERCEL_PROJECT_PRODUCTION_URL ?? source.VERCEL_URL;
+
+  if (!vercelUrl) {
+    return undefined;
+  }
+
+  return vercelUrl.startsWith("http") ? vercelUrl : `https://${vercelUrl}`;
+}
+
+function isLocalhostInProduction(
+  value: string | undefined,
+  source: NodeJS.ProcessEnv,
+) {
+  return (
+    source.NODE_ENV === "production" && Boolean(value?.includes("localhost"))
+  );
 }
