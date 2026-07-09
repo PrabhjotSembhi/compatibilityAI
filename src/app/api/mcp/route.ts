@@ -7,6 +7,7 @@ import {
   type JsonRpcRequest,
   success,
 } from "@/server/mcp/json-rpc";
+import type { McpSession } from "@/server/mcp/context";
 import { callTool, listTools } from "@/server/mcp/tools";
 
 const protocolVersion = "2025-06-18";
@@ -72,13 +73,13 @@ export async function POST(request: Request) {
 
   if (Array.isArray(payload)) {
     const responses = (
-      await Promise.all(payload.map((item) => handleRequest(item)))
+      await Promise.all(payload.map((item) => handleRequest(item, session)))
     ).filter(Boolean);
 
     return Response.json(responses, { headers: corsHeaders() });
   }
 
-  const response = await handleRequest(payload);
+  const response = await handleRequest(payload, session);
 
   if (!response) {
     return new Response(null, { status: 204, headers: corsHeaders() });
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
   return Response.json(response, { headers: corsHeaders() });
 }
 
-async function handleRequest(payload: unknown) {
+async function handleRequest(payload: unknown, session: McpSession) {
   const request = parseRequest(payload);
   const id = request?.id ?? null;
 
@@ -96,18 +97,18 @@ async function handleRequest(payload: unknown) {
   }
 
   if (request.id === undefined) {
-    await dispatch(request);
+    await dispatch(request, session);
     return null;
   }
 
   try {
-    return success(id, await dispatch(request));
+    return success(id, await dispatch(request, session));
   } catch (error) {
     return errorToRpc(id, error);
   }
 }
 
-async function dispatch(request: JsonRpcRequest) {
+async function dispatch(request: JsonRpcRequest, session: McpSession) {
   switch (request.method) {
     case "initialize":
       return {
@@ -127,7 +128,7 @@ async function dispatch(request: JsonRpcRequest) {
     case "tools/list":
       return listTools();
     case "tools/call":
-      return callTool(request.params);
+      return callTool(request.params, session);
     case "resources/list":
       return { resources: [] };
     case "prompts/list":
