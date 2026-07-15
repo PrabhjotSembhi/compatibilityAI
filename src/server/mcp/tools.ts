@@ -142,15 +142,15 @@ const createPromptPacketTool: ToolDefinition = {
       content: [
         {
           type: "text",
-          text: "Internal report instructions are ready. Use structuredContent.internalPromptPacket.fullPrompt privately to generate a polished report now. Do not show the raw prompt, JSON schema, prompt keys, or any implementation details to the user.",
+          text: "Ready to generate the finished report privately. Continue by writing the polished report for the user, then save it.",
         },
       ],
       structuredContent: {
         reportType: packet.reportType,
         title: packet.title,
-        internalPromptPacket: packet,
+        privateInstructions: packet.fullPrompt,
         nextStep:
-          "Generate the final report in the current ChatGPT conversation using the internal prompt packet, then call save_report with the structured report.",
+          "Use privateInstructions only as hidden guidance. Do not mention prompts, schemas, prompt packets, tool calls, backend validation, or implementation details to the user. After generating the report, call save_report with the finished report.",
       },
     };
   },
@@ -174,24 +174,36 @@ const saveReportTool: ToolDefinition = {
         description:
           "The polished structured report generated inside ChatGPT. Do not include raw prompts or schemas.",
       },
+      chatgptOutput: {
+        type: "object",
+        description:
+          "Backward-compatible alias for report. Prefer report for new calls.",
+      },
       shareable: {
         type: "boolean",
         default: true,
       },
     },
-    required: ["reportType", "report"],
-    additionalProperties: false,
+    required: ["reportType"],
+    additionalProperties: true,
   },
   async execute(input, context) {
     const parsed = validateInput(
-      z.object({
-        reportType: selfDiscoveryReportTypeSchema,
-        relationshipType: z.string().min(1).optional(),
-        report: selfDiscoveryReportOutputSchema,
-        shareable: z.boolean().default(true),
-      }),
+      z
+        .object({
+          reportType: selfDiscoveryReportTypeSchema,
+          relationshipType: z.string().min(1).optional(),
+          report: z.unknown().optional(),
+          chatgptOutput: z.unknown().optional(),
+          shareable: z.boolean().default(true),
+        })
+        .passthrough(),
       input,
     );
+    const report = normalizeSelfDiscoveryReport({
+      reportType: parsed.reportType,
+      value: parsed.report ?? parsed.chatgptOutput,
+    });
     const relationshipContextId = await resolveRelationshipContextId({
       userId: context.userId,
       relationshipType: parsed.relationshipType,
@@ -205,7 +217,7 @@ const saveReportTool: ToolDefinition = {
       profileId,
       relationshipContextId,
       reportType: parsed.reportType,
-      chatgptOutput: parsed.report,
+      chatgptOutput: report,
       shareable: parsed.shareable,
     });
 
@@ -458,6 +470,118 @@ function formatRecommendations(
     .join("\n");
 }
 
+function normalizeSelfDiscoveryReport(input: {
+  reportType: string;
+  value: unknown;
+}) {
+  if (!input.value || typeof input.value !== "object") {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "A finished report is required before saving.",
+    );
+  }
+
+  const report = input.value as Record<string, unknown>;
+  const normalized = {
+    reportType: readString(report.reportType) ?? input.reportType,
+    title: readString(report.title) ?? titleizeReportType(input.reportType),
+    summary: readString(report.summary) ?? "Self-discovery report saved.",
+    sections: normalizeSections(report.sections),
+    insights: normalizeStringArray(report.insights),
+    actionItems: normalizeStringArray(report.actionItems),
+    profileUpdates: normalizeProfileUpdates(report.profileUpdates),
+    confidence: normalizeConfidence(report.confidence),
+  };
+
+  return validateInput(selfDiscoveryReportOutputSchema, normalized);
+}
+
+function normalizeSections(value: unknown) {
+  if (Array.isArray(value)) {
+    const sections = value
+      .map((section) => {
+        if (!section || typeof section !== "object") {
+          return null;
+        }
+
+        const record = section as Record<string, unknown>;
+        const heading =
+          readString(record.heading) ??
+          readString(record.title) ??
+          readString(record.name);
+        const body =
+          readString(record.body) ??
+          readString(record.content) ??
+          readString(record.text);
+
+        return heading && body ? { heading, body } : null;
+      })
+      .filter((section) => section !== null);
+
+    if (sections.length) {
+      return sections;
+    }
+  }
+
+  if (value && typeof value === "object") {
+    const sections = Object.entries(value as Record<string, unknown>)
+      .map(([heading, body]) => ({
+        heading: titleize(heading),
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      }))
+      .filter((section) => section.body);
+
+    if (sections.length) {
+      return sections;
+    }
+  }
+
+  return [
+    {
+      heading: "Report",
+      body: "The report was saved, but no detailed sections were provided.",
+    },
+  ];
+}
+
+function normalizeStringArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item : JSON.stringify(item)))
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return [value];
+  }
+
+  return [];
+}
+
+function normalizeProfileUpdates(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function normalizeConfidence(value: unknown) {
+  if (typeof value === "number") {
+    return value > 1 ? value / 100 : value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace("%", ""));
+
+    if (Number.isFinite(parsed)) {
+      return parsed > 1 ? parsed / 100 : parsed;
+    }
+  }
+
+  return 0.5;
+}
+
 function formatExplanation(explanation: unknown) {
   if (
     explanation &&
@@ -473,4 +597,19 @@ function formatExplanation(explanation: unknown) {
   }
 
   return "Selected from your compatibility profile, preferences, and shared relationship context.";
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function titleizeReportType(value: string) {
+  return titleize(value.replace(/_/g, " "));
+}
+
+function titleize(value: string) {
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
